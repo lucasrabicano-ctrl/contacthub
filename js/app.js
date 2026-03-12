@@ -1,4 +1,4 @@
-// ─── APP.JS — Orquestrador principal + UI helpers ───
+// ─── APP.JS — Orquestrador principal (init async + Supabase realtime + UI) ───
 
 // ── UI helpers ──
 const UI = {
@@ -23,24 +23,44 @@ const UI = {
     setTimeout(() => {
       toast.classList.add('fade-out');
       setTimeout(() => toast.remove(), 350);
-    }, 4000);
+    }, 4500);
   },
   openModal(html) {
     document.getElementById('modal-box').innerHTML = html;
     document.getElementById('modal').style.display = 'flex';
-    // Fechar ao clicar no backdrop
     document.getElementById('modal').onclick = (e) => {
       if (e.target === document.getElementById('modal')) UI.closeModal();
     };
-    // ESC fecha
     document.addEventListener('keydown', UI._escHandler);
   },
   closeModal() {
     document.getElementById('modal').style.display = 'none';
     document.removeEventListener('keydown', UI._escHandler);
   },
-  _escHandler(e) {
-    if (e.key === 'Escape') UI.closeModal();
+  _escHandler(e) { if (e.key === 'Escape') UI.closeModal(); },
+};
+
+// ── Indicador de conexão realtime ──
+const RealtimeStatus = {
+  _el: null,
+  init() {
+    const topbar = document.querySelector('.topbar-actions');
+    const dot = document.createElement('div');
+    dot.id = 'realtime-dot';
+    dot.title = 'Conectando ao realtime...';
+    dot.style.cssText = `width:8px;height:8px;border-radius:50%;background:#f59e0b;transition:background 0.4s;flex-shrink:0;`;
+    topbar.prepend(dot);
+    this._el = dot;
+  },
+  setConnected() {
+    if (!this._el) return;
+    this._el.style.background = '#10b981';
+    this._el.title = '🟢 Realtime conectado — sincronizando em tempo real';
+  },
+  setDisconnected() {
+    if (!this._el) return;
+    this._el.style.background = '#ef4444';
+    this._el.title = '🔴 Realtime desconectado';
   },
 };
 
@@ -49,33 +69,50 @@ const App = {
   _currentSection: 'contacts',
   _sidebarCollapsed: false,
 
-  init() {
-    // Carregar dados do localStorage
-    StorageManager.load();
-    // Renderizar
+  async init() {
+    RealtimeStatus.init();
+
+    // Mostrar loading enquanto carrega do Supabase
+    UI.showLoading('Carregando dados do servidor...');
+    try {
+      await StorageManager.load();
+    } catch (e) {
+      UI.toast('Erro ao conectar ao banco de dados. Verifique a conexão.', 'error');
+      console.error(e);
+    }
+    UI.hideLoading();
+
+    // Iniciar realtime
+    try {
+      StorageManager.subscribeRealtime();
+      // Verificar status da conexão após 2s
+      setTimeout(() => {
+        const channels = db.getChannels();
+        const allSubscribed = channels.every(c => c.state === 'joined');
+        if (allSubscribed) RealtimeStatus.setConnected();
+        else RealtimeStatus.setDisconnected();
+      }, 2000);
+    } catch (e) {
+      console.warn('Realtime não disponível:', e);
+      RealtimeStatus.setDisconnected();
+    }
+
     this.refresh();
-    // Checar preferência do sidebar
+
+    // Restaurar preferência de sidebar
     const collapsed = localStorage.getItem('sidebar_collapsed') === 'true';
     if (collapsed) this.toggleSidebar();
   },
 
   navigate(section) {
     this._currentSection = section;
-
-    // Atualizar nav items
     document.querySelectorAll('.nav-item').forEach(el => {
       el.classList.toggle('active', el.dataset.section === section);
     });
-
-    // Mostrar seção correta
     document.querySelectorAll('.section').forEach(el => el.classList.remove('active'));
     document.getElementById(`section-${section}`).classList.add('active');
-
-    // Atualizar título do topbar
     const titles = { contacts: 'Contatos', attendants: 'Atendentes', export: 'Exportar' };
     document.getElementById('topbar-title').textContent = titles[section] || section;
-
-    // Fechar sidebar mobile
     document.getElementById('sidebar').classList.remove('mobile-open');
   },
 

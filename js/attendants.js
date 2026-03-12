@@ -1,4 +1,4 @@
-// ─── ATTENDANTS.JS — CRUD completo de atendentes ───
+// ─── ATTENDANTS.JS — CRUD de atendentes (async com Supabase) ───
 const AttendantsManager = {
   _editingId: null,
 
@@ -17,12 +17,12 @@ const AttendantsManager = {
     }
 
     grid.innerHTML = AppState.attendants.map(a => {
-      const count = AppState.contacts.filter(c => c.atendente_id === a.id).length;
-      const initials = a.nome.split(' ').map(w => w[0]).slice(0,2).join('').toUpperCase();
+      const count    = AppState.contacts.filter(c => c.atendente_id === a.id).length;
+      const initials = a.nome.split(' ').map(w => w[0]).slice(0, 2).join('').toUpperCase();
       return `
         <div class="attendant-card" id="acard-${a.id}">
-          <div class="attendant-card-accent" style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${a.cor};border-radius:12px 0 0 12px;"></div>
-          <div class="attendant-avatar" style="background:${a.cor}; box-shadow:0 4px 15px ${this._hexToRgba(a.cor, 0.4)}">${initials}</div>
+          <div style="position:absolute;left:0;top:0;bottom:0;width:4px;background:${a.cor};border-radius:12px 0 0 12px;"></div>
+          <div class="attendant-avatar" style="background:${a.cor};box-shadow:0 4px 15px ${this._hexToRgba(a.cor,0.4)}">${initials}</div>
           <div class="attendant-info">
             <div class="attendant-name">${this._esc(a.nome)}</div>
             <div class="attendant-count">${count} contato(s) ligado(s)</div>
@@ -39,8 +39,7 @@ const AttendantsManager = {
               </svg>
             </button>
           </div>
-        </div>
-      `;
+        </div>`;
     }).join('');
   },
 
@@ -48,11 +47,10 @@ const AttendantsManager = {
     this._editingId = id;
     const att = id ? AppState.getAttendant(id) : null;
     const defaultColor = this._randomColor();
-
     UI.openModal(`
       <div class="modal-title">${att ? 'Editar Atendente' : 'Novo Atendente'}</div>
       <div class="form-group">
-        <label class="form-label" for="att-nome">Nome</label>
+        <label class="form-label">Nome</label>
         <input type="text" class="form-input" id="att-nome" placeholder="Nome do atendente"
           value="${att ? this._esc(att.nome) : ''}" autofocus/>
       </div>
@@ -70,15 +68,13 @@ const AttendantsManager = {
       </div>
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="UI.closeModal()">Cancelar</button>
-        <button class="btn btn-primary" onclick="AttendantsManager.save()">
+        <button class="btn btn-primary" id="att-save-btn" onclick="AttendantsManager.save()">
           ${att ? 'Salvar' : 'Criar Atendente'}
         </button>
       </div>
     `);
-
-    // Submit ao pressionar Enter no nome
     setTimeout(() => {
-      document.getElementById('att-nome').addEventListener('keydown', (e) => {
+      document.getElementById('att-nome').addEventListener('keydown', e => {
         if (e.key === 'Enter') AttendantsManager.save();
       });
     }, 50);
@@ -91,21 +87,23 @@ const AttendantsManager = {
     }
   },
 
-  save() {
+  async save() {
     const nome = document.getElementById('att-nome').value.trim();
     const cor  = document.getElementById('att-cor-picker').value;
-
     if (!nome) {
-      document.getElementById('att-nome').focus();
       document.getElementById('att-nome').style.borderColor = 'var(--danger)';
+      document.getElementById('att-nome').focus();
       return;
     }
 
+    const btn = document.getElementById('att-save-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Salvando...'; }
+
     if (this._editingId) {
-      AppState.updateAttendant(this._editingId, nome, cor);
+      await AppState.updateAttendant(this._editingId, nome, cor);
       UI.toast('Atendente atualizado!', 'success');
     } else {
-      AppState.addAttendant(nome, cor);
+      await AppState.addAttendant(nome, cor);
       UI.toast('Atendente criado!', 'success');
     }
 
@@ -114,25 +112,26 @@ const AttendantsManager = {
   },
 
   confirmDelete(id) {
-    const att = AppState.getAttendant(id);
+    const att   = AppState.getAttendant(id);
     if (!att) return;
     const count = AppState.contacts.filter(c => c.atendente_id === id).length;
-
     UI.openModal(`
       <div class="modal-title">Deletar Atendente</div>
       <p style="color:var(--text-2);font-size:14px;line-height:1.6;margin-bottom:8px">
         Tem certeza que deseja deletar <strong style="color:var(--text-1)">${this._esc(att.nome)}</strong>?
       </p>
-      ${count > 0 ? `<p style="color:var(--warning);font-size:13px;margin-bottom:0">⚠ ${count} contato(s) perderão a marcação deste atendente.</p>` : ''}
+      ${count > 0 ? `<p style="color:var(--warning);font-size:13px">⚠ ${count} contato(s) perderão a marcação deste atendente.</p>` : ''}
       <div class="modal-actions">
         <button class="btn btn-ghost" onclick="UI.closeModal()">Cancelar</button>
-        <button class="btn btn-danger" onclick="AttendantsManager.doDelete('${id}')">Deletar</button>
+        <button class="btn btn-danger" id="del-btn" onclick="AttendantsManager.doDelete('${id}')">Deletar</button>
       </div>
     `);
   },
 
-  doDelete(id) {
-    AppState.deleteAttendant(id);
+  async doDelete(id) {
+    const btn = document.getElementById('del-btn');
+    if (btn) { btn.disabled = true; btn.textContent = 'Deletando...'; }
+    await AppState.deleteAttendant(id);
     UI.toast('Atendente removido.', 'info');
     UI.closeModal();
     App.refresh();
@@ -142,16 +141,10 @@ const AttendantsManager = {
     const colors = ['#7c3aed','#06b6d4','#10b981','#f59e0b','#ef4444','#ec4899','#8b5cf6','#14b8a6','#f97316','#6366f1'];
     return colors[Math.floor(Math.random() * colors.length)];
   },
-
-  _esc(str) {
-    return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;');
-  },
-
+  _esc(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;').replace(/"/g,'&quot;'); },
   _hexToRgba(hex, alpha) {
     try {
-      const r = parseInt(hex.slice(1,3),16);
-      const g = parseInt(hex.slice(3,5),16);
-      const b = parseInt(hex.slice(5,7),16);
+      const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
       return `rgba(${r},${g},${b},${alpha})`;
     } catch { return `rgba(0,0,0,${alpha})`; }
   },

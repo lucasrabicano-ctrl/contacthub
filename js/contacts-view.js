@@ -1,4 +1,4 @@
-// ─── CONTACTS-VIEW.JS — Renderização da tabela de contatos ───
+// ─── CONTACTS-VIEW.JS — Tabela de contatos (assignAttendant async) ───
 const ContactsView = {
 
   render() {
@@ -8,14 +8,12 @@ const ContactsView = {
 
     const filtered = AppState.getFiltered();
     const sorted   = AppState.getSorted(filtered);
-
-    // Paginação
-    const total = sorted.length;
-    const paged = AppState.getPaged(sorted);
+    const total    = sorted.length;
+    const paged    = AppState.getPaged(sorted);
 
     this._renderTable(paged);
     this._renderPagination(total);
-    this._updateExportStats(total, filtered);
+    this._updateExportStats();
   },
 
   _renderTable(contacts) {
@@ -30,26 +28,24 @@ const ContactsView = {
       pag.style.display   = 'none';
       return;
     }
-
     empty.style.display = 'none';
     table.style.display = 'table';
 
     if (contacts.length === 0) {
-      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-3)">Nenhum contato encontrado com os filtros atuais.</td></tr>`;
+      tbody.innerHTML = `<tr><td colspan="5" style="text-align:center;padding:40px;color:var(--text-3)">Nenhum contato encontrado.</td></tr>`;
       pag.style.display = 'none';
       return;
     }
 
     tbody.innerHTML = contacts.map(c => {
-      const att    = c.atendente_id ? AppState.getAttendant(c.atendente_id) : null;
-      const color  = att ? att.cor : null;
-      const rowBg  = color ? `background: ${this._hexToRgba(color, 0.07)};` : '';
+      const att     = c.atendente_id ? AppState.getAttendant(c.atendente_id) : null;
+      const color   = att ? att.cor : null;
+      const rowBg   = color ? `background:${this._hexToRgba(color, 0.07)};` : '';
       const dateFmt = c.data_de_marcacao
-        ? new Date(c.data_de_marcacao).toLocaleDateString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
+        ? new Date(c.data_de_marcacao).toLocaleString('pt-BR', { day:'2-digit', month:'2-digit', year:'2-digit', hour:'2-digit', minute:'2-digit' })
         : '—';
-
       const attOptions = AppState.attendants.map(a =>
-        `<option value="${a.id}" ${c.atendente_id === a.id ? 'selected' : ''} style="color:#fff">${a.nome}</option>`
+        `<option value="${a.id}" ${c.atendente_id === a.id ? 'selected' : ''}>${a.nome}</option>`
       ).join('');
 
       return `
@@ -66,9 +62,8 @@ const ContactsView = {
               ${attOptions}
             </select>
           </td>
-          <td style="font-size:12px; color:var(--text-3)">${dateFmt}</td>
-        </tr>
-      `;
+          <td style="font-size:12px;color:var(--text-3)">${dateFmt}</td>
+        </tr>`;
     }).join('');
   },
 
@@ -84,57 +79,41 @@ const ContactsView = {
     const totalPages = Math.ceil(total / pageSize);
     const start = (page - 1) * pageSize + 1;
     const end   = Math.min(page * pageSize, total);
-
     info.textContent = `${start}–${end} de ${total} contatos`;
 
-    let pages = '';
-    // Prev
-    pages += `<button class="page-btn" ${page === 1 ? 'disabled' : ''} onclick="ContactsView.goToPage(${page-1})" title="Anterior">‹</button>`;
-
-    // Page buttons (max 7 visible)
+    let pages = `<button class="page-btn" ${page===1?'disabled':''} onclick="ContactsView.goToPage(${page-1})">‹</button>`;
     const delta = 2;
     const range = [];
-    for (let i = Math.max(2, page - delta); i <= Math.min(totalPages - 1, page + delta); i++) range.push(i);
+    for (let i = Math.max(2, page-delta); i <= Math.min(totalPages-1, page+delta); i++) range.push(i);
 
-    const showFirst = totalPages > 1;
-    const showLast  = totalPages > 1;
-
-    if (showFirst) {
+    if (totalPages > 1) {
       pages += `<button class="page-btn ${page===1?'active':''}" onclick="ContactsView.goToPage(1)">1</button>`;
       if (range[0] > 2) pages += `<button class="page-btn" disabled>…</button>`;
     }
-    range.forEach(p => {
-      pages += `<button class="page-btn ${p===page?'active':''}" onclick="ContactsView.goToPage(${p})">${p}</button>`;
-    });
-    if (showLast && totalPages > 1) {
-      if (range[range.length-1] < totalPages - 1) pages += `<button class="page-btn" disabled>…</button>`;
+    range.forEach(p => { pages += `<button class="page-btn ${p===page?'active':''}" onclick="ContactsView.goToPage(${p})">${p}</button>`; });
+    if (totalPages > 1) {
+      if (range[range.length-1] < totalPages-1) pages += `<button class="page-btn" disabled>…</button>`;
       pages += `<button class="page-btn ${page===totalPages?'active':''}" onclick="ContactsView.goToPage(${totalPages})">${totalPages}</button>`;
     }
-
-    // Next
-    pages += `<button class="page-btn" ${page >= totalPages ? 'disabled' : ''} onclick="ContactsView.goToPage(${page+1})" title="Próximo">›</button>`;
-
+    pages += `<button class="page-btn" ${page>=totalPages?'disabled':''} onclick="ContactsView.goToPage(${page+1})">›</button>`;
     ctrl.innerHTML = pages;
   },
 
   _updateStats() {
     const s = AppState.getStats();
-    document.getElementById('stat-total').textContent     = s.total;
-    document.getElementById('stat-called').textContent    = s.called;
-    document.getElementById('stat-uncalled').textContent  = s.uncalled;
+    document.getElementById('stat-total').textContent      = s.total;
+    document.getElementById('stat-called').textContent     = s.called;
+    document.getElementById('stat-uncalled').textContent   = s.uncalled;
     document.getElementById('stat-attendants').textContent = AppState.attendants.length;
   },
 
-  _updateExportStats(filteredTotal, filteredList) {
-    const called   = filteredList.filter(c => c.atendente_id).length;
-    const uncalled = filteredTotal - called;
-    const pct = filteredTotal > 0 ? Math.round(called / filteredTotal * 100) : 0;
-    const total = AppState.contacts.length;
-    const tcalled = AppState.contacts.filter(c => c.atendente_id).length;
-    document.getElementById('exp-total').textContent   = total;
-    document.getElementById('exp-called').textContent  = tcalled;
-    document.getElementById('exp-uncalled').textContent = total - tcalled;
-    document.getElementById('exp-pct').textContent     = (total > 0 ? Math.round(tcalled/total*100) : 0) + '%';
+  _updateExportStats() {
+    const s = AppState.getStats();
+    const pct = s.total > 0 ? Math.round(s.called / s.total * 100) : 0;
+    document.getElementById('exp-total').textContent   = s.total;
+    document.getElementById('exp-called').textContent  = s.called;
+    document.getElementById('exp-uncalled').textContent = s.uncalled;
+    document.getElementById('exp-pct').textContent     = pct + '%';
   },
 
   _updateLegend() {
@@ -145,13 +124,11 @@ const ContactsView = {
       <div class="legend-item">
         <span class="legend-dot" style="background:${a.cor}"></span>
         <span>${this._esc(a.nome)}</span>
-      </div>
-    `).join('') + `
+      </div>`).join('') + `
       <div class="legend-item">
         <span class="legend-dot" style="background:var(--border-strong)"></span>
         <span style="color:var(--text-3)">Sem atendente</span>
-      </div>
-    `;
+      </div>`;
   },
 
   _updateFilterSelect() {
@@ -160,13 +137,12 @@ const ContactsView = {
     sel.innerHTML = `
       <option value="">Todos os atendentes</option>
       <option value="unassigned">Sem atendente</option>
-      ${AppState.attendants.map(a => `<option value="${a.id}" ${cur===a.id?'selected':''}>${this._esc(a.nome)}</option>`).join('')}
-    `;
+      ${AppState.attendants.map(a => `<option value="${a.id}" ${cur===a.id?'selected':''}>${this._esc(a.nome)}</option>`).join('')}`;
     sel.value = cur;
   },
 
-  assignAttendant(contactId, attendantId) {
-    AppState.setContactAttendant(contactId, attendantId || null);
+  async assignAttendant(contactId, attendantId) {
+    await AppState.setContactAttendant(contactId, attendantId || null);
     this.render();
   },
 
@@ -189,29 +165,22 @@ const ContactsView = {
   },
 
   sort(field) {
-    if (AppState.sort.field === field) {
-      AppState.sort.dir = AppState.sort.dir === 'asc' ? 'desc' : 'asc';
-    } else {
-      AppState.sort.field = field;
-      AppState.sort.dir = 'asc';
-    }
+    if (AppState.sort.field === field) AppState.sort.dir = AppState.sort.dir === 'asc' ? 'desc' : 'asc';
+    else { AppState.sort.field = field; AppState.sort.dir = 'asc'; }
     this.render();
   },
 
   goToPage(p) {
     AppState.pagination.page = p;
     this.render();
-    document.getElementById('contacts-tbody').closest('.table-wrap').scrollIntoView({ behavior: 'smooth', block: 'start' });
+    document.getElementById('contacts-tbody')?.closest('.table-wrap')?.scrollIntoView({ behavior:'smooth', block:'start' });
   },
 
-  _esc(str) {
-    return String(str || '').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;');
-  },
-
+  _esc(str) { return String(str||'').replace(/&/g,'&amp;').replace(/</g,'&lt;').replace(/>/g,'&gt;'); },
   _hexToRgba(hex, alpha) {
-    const r = parseInt(hex.slice(1,3),16);
-    const g = parseInt(hex.slice(3,5),16);
-    const b = parseInt(hex.slice(5,7),16);
-    return `rgba(${r},${g},${b},${alpha})`;
+    try {
+      const r=parseInt(hex.slice(1,3),16), g=parseInt(hex.slice(3,5),16), b=parseInt(hex.slice(5,7),16);
+      return `rgba(${r},${g},${b},${alpha})`;
+    } catch { return `rgba(0,0,0,${alpha})`; }
   },
 };

@@ -8,6 +8,7 @@
 <link rel="preconnect" href="https://fonts.googleapis.com"/>
 <link rel="preconnect" href="https://fonts.gstatic.com" crossorigin/>
 <link href="https://fonts.googleapis.com/css2?family=Syne:wght@400;500;600;700;800&family=DM+Sans:ital,opsz,wght@0,9..40,300;0,9..40,400;0,9..40,500;0,9..40,600;1,9..40,400&display=swap" rel="stylesheet"/>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="https://cdn.jsdelivr.net/npm/xlsx@0.18.5/dist/xlsx.full.min.js"></script>
 <script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
@@ -929,6 +930,7 @@ input[type="color"] { position: absolute; opacity: 0; width: 0; height: 0; }
 <!-- Hidden file input -->
 <input type="file" id="file-input" accept=".csv,.xlsx,.xls,.pdf" style="display:none" onchange="ImportManager.handleFileInput(event)"/>
 
+<script src="js/supabase-client.js"></script>
 <script src="js/state.js"></script>
 <script src="js/storage.js"></script>
 <script src="js/import-manager.js"></script>
